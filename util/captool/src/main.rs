@@ -11,14 +11,15 @@ mod flows;
 mod ip;
 mod limit;
 mod packet_handler;
+mod common;
 use ip::MutableIpPacket;
+use common::{parse_asn_list, parse_cc_list, parse_targets, debug_warn};
 use packet_handler::{PacketError, PacketHandler, SupplementalFields};
 
 use clap::Parser;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use humantime::parse_duration;
-use ipnet::IpNet;
 use pcap::{Activated, Capture, Device, Linktype};
 use pcap_file::pcapng::blocks::enhanced_packet::EnhancedPacketBlock;
 use pcap_file::pcapng::blocks::interface_description::InterfaceDescriptionBlock;
@@ -33,7 +34,6 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{self, File};
 #[cfg(debug_assertions)]
-use std::io::stdin;
 use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -152,18 +152,6 @@ struct Args {
     /// Path to the Geolite CountryCode database (.mmdb) file
     #[arg(long, default_value_t = String::from(CCDB_PATH))]
     cc_db: String,
-}
-
-#[cfg(debug_assertions)]
-fn debug_warn() {
-    println!("WARNING - running in debug mode. Press enter to continue:");
-    let mut input_text = String::new();
-    stdin()
-        .read_line(&mut input_text)
-        .expect("failed to read from stdin");
-
-    simple_logger::init_with_level(log::Level::Debug).unwrap();
-    debug!("Debug enabled")
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -530,54 +518,6 @@ fn read_packets<T, W>(
         }
     }
     debug!("thread {id} shutting down")
-}
-
-fn parse_targets(input: String) -> Vec<IpNet> {
-    // vec!["192.122.190.0/24".parse()?]
-    if input.is_empty() {
-        return vec![];
-    }
-
-    let mut out = vec![];
-    for s in input.split(',') {
-        if let Ok(subnet) = s.trim().parse() {
-            out.push(subnet);
-            debug!("adding target: {subnet}");
-        } else {
-            warn!("failed to parse subnet: \"{s}\" continuing");
-        }
-    }
-    out
-}
-
-fn parse_asn_list(input: Option<String>) -> Vec<u32> {
-    match input {
-        None => vec![],
-        Some(s) => {
-            if s.is_empty() {
-                vec![]
-            } else {
-                let mut out = vec![];
-                for s in s.split(',') {
-                    out.push(s.trim().parse().unwrap());
-                }
-                out
-            }
-        }
-    }
-}
-
-fn parse_cc_list(input: Option<String>) -> Vec<String> {
-    match input {
-        None => vec![],
-        Some(s) => {
-            if s.is_empty() {
-                vec![]
-            } else {
-                s.split(',').map(|s| s.trim().to_string()).collect()
-            }
-        }
-    }
 }
 
 // [X] read packets with pcap from interface / file and convert to usable type
